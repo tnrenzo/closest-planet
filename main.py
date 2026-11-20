@@ -40,7 +40,7 @@ def fetch_data(outdir: Path | None = None) -> None:
 
         data_file = outdir / f"{planet}.txt"
         with open(data_file, "w") as f:
-            print(f"Fetch {planet}: {data_file}")
+            print(f"Fetch {pstr(planet)} {data_file}")
             f.write(resp.text)
         f.close()
 
@@ -75,28 +75,32 @@ def parse_data(datadir: Path | str = Path(__file__).parent / "data") -> dict[str
     
     # carve out only needed data (x and y vectors per planet)
     for planet, properties in PLANET_PROPERTIES.items():
-        posx = float(properties[0]["X"])
-        posy = float(properties[0]["Y"])
-        positions[str(planet)] = {"X": posx, "Y": posy}
+        xs = []
+        ys = []
+        for row in properties[:]:
+            xs.append(float(row["X"]))
+            ys.append(float(row["Y"]))
+        positions[str(planet)] = {"X": xs, "Y": ys}
     #print(positions)
 
     return positions
     
-def calculate_distances(parsed_data: dict[str, dict[str, str]]):
-    distances: list[dict[str, [dict[str, float]]]] = {} # [MARS: {"Earth": dist_to_earth}, "Jupiter": dist_to_jupit]
+def calculate_distances(parsed_data):
+    distances = {} # [MARS: {"Earth": dist_to_earth}, "Jupiter": dist_to_jupit]
     # calculate distances
     for planet, pos in parsed_data.items():
         distances[planet] = {}
-        p1 = [pos["X"], pos["Y"]]           # vector
         for target_planet in PLANET_IDENTIFIERS:
             if planet == target_planet:
                 continue
-            p2 = [parsed_data[target_planet]["X"], parsed_data[target_planet]["Y"]] # vector
-            
-            p1p2 = [p2[0] - p1[0], p2[1] - p1[1]]
-
-            dist = math.sqrt(math.pow(p1p2[0], 2) + math.pow(p1p2[1], 2))
-            distances[planet][target_planet] = round(dist, 6)
+            distances[planet][target_planet] = []
+            # one distance per day
+            for day in range(len(pos["X"])):
+                p1 = [pos["X"][day], pos["Y"][day]]           # vector
+                p2 = [parsed_data[target_planet]["X"][day], parsed_data[target_planet]["Y"][day]] # vector
+                p1p2 = [p2[0] - p1[0], p2[1] - p1[1]]
+                dist = math.sqrt(math.pow(p1p2[0], 2) + math.pow(p1p2[1], 2))
+                distances[planet][target_planet].append(round(dist, 6))
         
     #print(distances)
     return distances
@@ -116,7 +120,55 @@ def generate_csv(distances):
         for a in PLANET_IDENTIFIERS:
             for b, d in distances[a].items():
                 if idx[a] < idx[b]:
-                    writer.writerow([a, b, round(d, 6)])
+                    for i, dist in enumerate(d):
+                        writer.writerow([a, b, i, dist])
+
+    f.close()
+
+def calculate_mostest_closest(csvfile):
+    try:
+        if not csvfile:
+            return
+
+        import numpy as np
+
+        names = np.loadtxt(csvfile, delimiter=",", usecols=(0, 1), dtype=str)
+        dists = np.loadtxt(csvfile, delimiter=",", usecols=3)
+
+        means = {planet: {} for planet in PLANET_IDENTIFIERS}
+
+        for planet in PLANET_IDENTIFIERS:
+            for reversedp in PLANET_IDENTIFIERS.__reversed__():
+                if planet == reversedp:
+                    break
+                mask = (names[:, 0] == planet) & (names[:, 1] == reversedp)
+                m = dists[mask].mean()
+                means[planet][reversedp] = m
+                means[reversedp][planet] = m
+
+        for planet, others in means.items():
+            closest = min(others, key=others.get)
+            print(f"{pstr(planet)} closest to {closest} on average ({others[closest]:.3f} AU)")
+    except FileNotFoundError:
+        print(f"Could not find csv file.\nMake sure to generate one first by running 'python3 {Path(sys.argv[0]).name} csv'")
+def pstr(string, pref_width=8):
+    pstring = string
+    pstring += ":"
+    while len(pstring) < pref_width:
+        pstring = f"{pstring}" + " "
+    return pstring
+
+def print_usage() -> None:
+    prog = Path(sys.argv[0]).name
+    print(f"""usage: python3 {prog} <command>
+
+commands:
+  (none) | help      show this message
+  fetch              download ephemeris data from JPL Horizons into data/
+  json               calculate distances and write out.json
+  csv                calculate distances and write out.csv
+  closest <csvfile>  find each planet's closest planet on average""")
+
 
 def main() -> None:
     argv = sys.argv
@@ -127,7 +179,7 @@ def main() -> None:
 
     match argv[1:]:
         case []:
-            routine()
+            print_usage()
 
         case ['fetch']:
             fetch_data()
@@ -137,6 +189,12 @@ def main() -> None:
 
         case ['csv']:
             generate_csv(routine())
+
+        case ['closest', csvfile]:
+            calculate_mostest_closest(csvfile)
+
+        case _:
+            print_usage()
 
 if __name__ == "__main__":
     main()

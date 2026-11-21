@@ -1,8 +1,18 @@
+from dataclasses import dataclass
 import math
 import sys
 from pathlib import Path
 
 import requests
+
+
+# generic vector class
+@dataclass
+class Vec3[T]:
+    x: T
+    y: T
+    z: T
+
 
 HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 
@@ -95,14 +105,14 @@ def parse_data(
             if line.strip()
         ]
 
-    # carve out only needed data (x and y vectors per planet)
+    # carve out only needed data (x, y and z vectors per planet)
     for planet, properties in PLANET_PROPERTIES.items():
-        xs = []
-        ys = []
+        ps = Vec3([], [], [])
         for row in properties[:]:
-            xs.append(float(row["X"]))
-            ys.append(float(row["Y"]))
-        positions[str(planet)] = {"X": xs, "Y": ys}
+            ps.x.append(float(row["X"]))
+            ps.y.append(float(row["Y"]))
+            ps.z.append(float(row["Z"]))
+        positions[str(planet)] = {"X": ps.x, "Y": ps.y, "Z": ps.z}
 
     return positions
 
@@ -118,14 +128,14 @@ def calculate_distances(parsed_data):
             distances[planet][target_planet] = []
             # one distance per day
             for day in range(len(pos["X"])):
-                p1 = [pos["X"][day], pos["Y"][day]]  # vector
-                p2 = [
+                p1 = Vec3(pos["X"][day], pos["Y"][day], pos["Z"][day])
+                p2 = Vec3(
                     parsed_data[target_planet]["X"][day],
                     parsed_data[target_planet]["Y"][day],
-                ]  # vector
-                p1p2 = [p2[0] - p1[0], p2[1] - p1[1]]
-                dist = math.sqrt(math.pow(p1p2[0], 2) + math.pow(p1p2[1], 2))
-                distances[planet][target_planet].append(round(dist, 6))
+                    parsed_data[target_planet]["Z"][day],
+                )
+                dist = math.dist((p1.x, p1.y, p1.z), (p2.x, p2.y, p2.z))
+                distances[planet][target_planet].append(round(dist, 12))
 
     return distances
 

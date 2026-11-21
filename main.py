@@ -79,8 +79,7 @@ def parse_data(
         "VY",
         "VZ",
     ]
-    # {"planet": {"X": xpos, "Y": ypos}}
-    positions: dict[str, dict[str, float]] = {}
+    positions: dict[str, dict[str, float]] = {}  # {"planet": {"X": xpos, "Y": ypos}}
 
     datadir = Path(datadir)
     if not datadir.exists():
@@ -89,8 +88,6 @@ def parse_data(
     for planet in PLANET_IDENTIFIERS:
         contents = (datadir / f"{planet}.txt").read_text()
         body = contents.split("$$SOE")[1].split("$$EOE")[0].strip()
-
-        # print(f"Parse: {planet}: {body}")
 
         PLANET_PROPERTIES[planet] = [
             dict(zip(_ENTRY_ORDER, (field.strip() for field in line.split(","))))
@@ -106,7 +103,6 @@ def parse_data(
             xs.append(float(row["X"]))
             ys.append(float(row["Y"]))
         positions[str(planet)] = {"X": xs, "Y": ys}
-    # print(positions)
 
     return positions
 
@@ -131,7 +127,6 @@ def calculate_distances(parsed_data):
                 dist = math.sqrt(math.pow(p1p2[0], 2) + math.pow(p1p2[1], 2))
                 distances[planet][target_planet].append(round(dist, 6))
 
-    # print(distances)
     return distances
 
 
